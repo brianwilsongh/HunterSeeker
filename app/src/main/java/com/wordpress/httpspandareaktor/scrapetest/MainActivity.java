@@ -70,7 +70,7 @@ public class MainActivity extends Activity {
     TextView progressText;
 
     //is the WebView already crawling?
-    boolean currentlyCrawling;
+    boolean crawlComplete;
 
     //page loaded
     boolean currentPageFinished = false;
@@ -93,7 +93,7 @@ public class MainActivity extends Activity {
         emailDisplay = (TextView) findViewById(R.id.emailDisplay);
 
         //not current crawling:
-        currentlyCrawling = false;
+        crawlComplete = false;
 
         browser = (WebView) findViewById(R.id.browser);
         browser.getSettings().setJavaScriptEnabled(true);
@@ -111,7 +111,7 @@ public class MainActivity extends Activity {
 
     }
 
-    class MyJavaScriptInterface {
+    private class MyJavaScriptInterface {
         //This JS interface is called from WebView after onFinish
 
         private Context ctx;
@@ -138,7 +138,7 @@ public class MainActivity extends Activity {
                 for (String string : tempHash) {
                     emailsFound++;
                     masterEmailSet.add(string);
-                    Log.v("masterEmailSet length", " +1");
+                    Log.v("masterEmailSet length", " +1 , total length: " + masterEmailSet.size());
                 }
             }
 
@@ -150,7 +150,16 @@ public class MainActivity extends Activity {
             pullLinks(lastResult);
             cleanCollectedLinks();
 
-            if (collectedLinks.iterator().hasNext()){
+
+            if (masterEmailSet.size() > 20){
+                //one of the "win conditions" has been met, email collection maxed
+                crawlComplete = true;
+
+            }
+
+
+            if (collectedLinks.iterator().hasNext() && !crawlComplete){
+                //if there's another link and crawl isn't deemed completed already, hit next URL
                 browser.post(new Runnable() {
                     @Override
                     public void run() {
@@ -160,6 +169,11 @@ public class MainActivity extends Activity {
                     }
                 });
             }
+
+            sleepMilliseconds(1000);
+
+
+
 
         }
     }
@@ -185,8 +199,8 @@ public class MainActivity extends Activity {
                 searchTerm = searchTermField.getText().toString();
                 //if the currentlyRunning boolean says there are no current tasks going, make a new one and reference it
 
-                //new task created so set boolean to true
-                currentlyCrawling = true;
+                //set up the UI while the user waits, show the WebView as well
+                browser.setVisibility(View.VISIBLE);
                 topSection.setVisibility(View.GONE);
                 progressBar.setVisibility(View.VISIBLE);
 //                emailDisplay.setVisibility(View.VISIBLE);
@@ -299,11 +313,18 @@ public class MainActivity extends Activity {
 
     public void killTask(View view) {
         //user wants to kill the AsyncTask
-        if (currentlyCrawling) {
-            currentlyCrawling = false;
-            progressBar.setVisibility(View.GONE);
-            displayMasterEmails();
+        Log.v("MainActivity.killTask", " triggered");
+        if (!crawlComplete) {
+            crawlComplete = true;
+            setPostCrawlUI();
         }
+    }
+
+    public void setPostCrawlUI(){
+        progressBar.setVisibility(View.GONE);
+        browser.setVisibility(View.GONE);
+        topSection.setVisibility(View.VISIBLE);
+        displayMasterEmails();
     }
 
     public boolean networkAvailable() {
