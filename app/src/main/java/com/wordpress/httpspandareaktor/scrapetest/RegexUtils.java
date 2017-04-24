@@ -18,8 +18,6 @@ public class RegexUtils {
         //HashSet that will contain emails from input string
         HashSet<String> emailsDiscovered = new HashSet<>();
 
-        //for testing
-        searchTerm = "";
         //reverse email dodging tactics
         String fixedInput = input.replaceAll("[\\s*\\[?\\(?]+[dD][oO][tT][\\)?\\]?\\s*]+", "\\.").replaceAll("[\\s*\\[?\\(?]+[aA][tT][\\)?\\]?\\s*]+", "@");
 
@@ -27,6 +25,7 @@ public class RegexUtils {
         //split input into array using delimiter of unlimited whitespace to capture everything
         String[] splitWordArray = fixedInput.split("\\s+");
         Log.v("RegexUtils.purify", "length of this array: " + splitWordArray.length);
+        Log.v("searchTerm is ", searchTerm);
 
         for (String word : splitWordArray) {
 
@@ -34,15 +33,19 @@ public class RegexUtils {
                 //if the word fits the format of an email (e.g. john.doe@email.com), consider it for HashSet
 
                     //strip out only the text between potential HTML tags, filter out filenames and API things
-                    String regex = "[^>=\"\\/@\\(\\);]+@\\w+\\.[[a-z[A-Z]]&&[^<\"(jpg||gif||png||calendar)]]+";
+                    String regex = "[^>=\"\\/@\\(\\);]+@\\w+\\.([[a-z[A-Z]]&&[^<\"]]+)";
                     Pattern pattern = Pattern.compile(regex);
                     Matcher matcher = pattern.matcher(word);
                     if (matcher.find() && word.toLowerCase().contains(searchTerm.toLowerCase())) {
-                        //if the word contains searchTerm ("" by default), add it in
-                        word = matcher.group();
-                        word = word.replaceAll("mailto:", "");
-                        emailsDiscovered.add(word);
-                        Log.v("RegexUtils.purify", " found an email: " + word);
+                        //if the word matches and contains searchTerm ("" by default), add it in
+                        Log.v("purify", " group(1) of this potential email: " + matcher.group(1));
+                        if (!matcher.group(1).matches("jpg|gif|png|calendar|cc")) {
+                            //if the last partition says it's not a filename or garbage address
+                            word = matcher.group();
+                            word = word.replaceAll("mailto:", "");
+                            emailsDiscovered.add(word);
+                            Log.v("RegexUtils.purify", "given searchTerm '" + searchTerm + "', found an email: " + word);
+                        }
                     }
             }
         }

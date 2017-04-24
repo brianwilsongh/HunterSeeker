@@ -39,23 +39,19 @@ public class MainActivity extends Activity implements HunterSeeker{
     private HashSet<String> collectedLinks = new HashSet<>();
     private HashSet<String> masterEmailSet = new HashSet<>();
 
-    //bucket string for holding the full html
-    String bucket = "";
-
 
     //first link visited, and the last HTML result received by WebView
     private String firstLinkAsString = "";
-    private String lastResult;
 
 
     //textviews to show emails found and html source
     TextView emailDisplay;
     TextView htmlDisplay;
     byte emailsFound = 0;
+    String lastHtmlResult;
 
     //this EditText is where the user's URL input goes, queried URL is another store (created URL) of the input
     EditText inputURL;
-    URL queriedURL;
 
     //the progress bar that starts invisible but is revealed after search begins, and the search term if it exists
     LinearLayout progressBar;
@@ -90,9 +86,6 @@ public class MainActivity extends Activity implements HunterSeeker{
         emailDisplay = (TextView) findViewById(R.id.emailDisplay);
         htmlDisplay = (TextView) findViewById(R.id.htmlDisplay);
 
-        //not current crawling:
-        crawlComplete = false;
-
         browser = (WebView) findViewById(R.id.browser);
         browser.getSettings().setJavaScriptEnabled(true);
         browser.addJavascriptInterface(new MyJavaScriptInterface(this, this), "HtmlOut");
@@ -123,6 +116,7 @@ public class MainActivity extends Activity implements HunterSeeker{
 
         @JavascriptInterface
         public void processHTML(String html) {
+            lastHtmlResult = html;
             //called when browser finished loading a page
 
             //below is an alert dialog to show the html directly
@@ -130,15 +124,17 @@ public class MainActivity extends Activity implements HunterSeeker{
 //                    .setPositiveButton(android.R.string.ok, null).setCancelable(false).create().show();
 
             //every time we call purify, we get a hashset, we want to copy that set into master
-            Log.v("processHTML", " just received html, show idx[0-100]: " + html.substring(0, 100));
-            lastResult = html;
-            final HashSet<String> emailsOnPage = RegexUtils.purify(html, searchTerm);
-            if ((html != null && !html.equals(""))  && emailsOnPage.size() > 0) {
+            Log.v("processHTML", " just received html: " + html);
+            final HashSet<String> emailsOnPage = RegexUtils.purify(lastHtmlResult, searchTerm);
+            if ((!html.equals(""))  && emailsOnPage.size() > 0) {
+                //if there was html with emails on the page
                 try {
                     runOnUiThread(new Runnable() {
+                        //create a new thread to call onFinishPage which can alter the UI
+                        //remember that Activity.runOnUiThread is specially made for this!
                         @Override
                         public void run() {
-                            mHunterSeeker.onFinishPage(emailsOnPage, lastResult);
+                            mHunterSeeker.onFinishPage(emailsOnPage, lastHtmlResult);
                         }
                     });
                 } catch (NullPointerException e ) {
@@ -146,19 +142,25 @@ public class MainActivity extends Activity implements HunterSeeker{
                 }
             }
 
-            pullLinks(lastResult);
+            pullLinks(html);
             cleanCollectedLinks();
 
+            //boolean flag to see if the crawler is done
+            crawlComplete = false;
 
             if (masterEmailSet.size() > 20){
-                //one of the "win conditions" has been met, email collection maxed
+                //if more than twenty emails have been discovered, the crawl is done
                 crawlComplete = true;
+            }
 
+            if (masterEmailSet.size() > 0 && !searchTerm.equals("")){
+                //if at least one email with the search term has been found, crawl is done
+                crawlComplete = true;
             }
 
 
             if (collectedLinks.iterator().hasNext() && !crawlComplete){
-                //if there's another link and crawl isn't deemed completed already, hit next URL
+                //if there's another link and crawl isn't deemed complete, hit next URL
                 browser.post(new Runnable() {
                     @Override
                     public void run() {
@@ -169,7 +171,7 @@ public class MainActivity extends Activity implements HunterSeeker{
                 });
             }
 
-            Log.v("processHtml", " will call onFinishPull on HunterSeeker instancel:" + mHunterSeeker.toString());
+            Log.v("processHtml", " will call onFinishPull on HunterSeeker instance " + mHunterSeeker.toString());
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -177,14 +179,11 @@ public class MainActivity extends Activity implements HunterSeeker{
                 }
             });
 
-            sleepMilliseconds(1000);
         }
-
     }
 
     public void extractButton(View view) {
         Log.v("extractButton", " initialized with URL field as:" + inputURL.getText().toString());
-        firstLinkAsString = inputURL.getText().toString();
 
         if (!networkAvailable()) {
             //Error message if the network is unavailable
@@ -199,6 +198,7 @@ public class MainActivity extends Activity implements HunterSeeker{
 
             if (currentURL != null) {
                 Log.v("extractButton", " says URL field is acceptable");
+                firstLinkAsString = inputURL.getText().toString();
                 searchTerm = searchTermField.getText().toString();
                 //if the currentlyRunning boolean says there are no current tasks going, make a new one and reference it
 
@@ -210,9 +210,6 @@ public class MainActivity extends Activity implements HunterSeeker{
 
                 //hit URL for an initial pull
                 hitURL(currentURL.toString());
-
-
-
 
             } else {
                 Toast.makeText(this, "Bad URL! Try again", Toast.LENGTH_SHORT).show();
@@ -227,8 +224,7 @@ public class MainActivity extends Activity implements HunterSeeker{
         // Simplest usage: note that an exception will NOT be thrown
         // if there is an error loading this page (see below).
 
-        //add the lastest url to visited URLs arraylist, increment links hit counter, add to bucket
-        crawlComplete = false;
+        //add this URL to visitedLinks and visit it
         visitedLinks.add(URL);
         browser.loadUrl(URL);
 
