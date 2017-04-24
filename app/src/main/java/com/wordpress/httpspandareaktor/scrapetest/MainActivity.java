@@ -29,7 +29,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements HunterSeeker{
 
     //this is the webview browser
     private WebView browser;
@@ -42,16 +42,15 @@ public class MainActivity extends Activity {
     //bucket string for holding the full html
     String bucket = "";
 
-    //the search term if it exists
-    private String mSearchTerm;
 
     //first link visited, and the last HTML result received by WebView
     private String firstLinkAsString = "";
     private String lastResult;
 
 
-    //this textview shows emails found, start as view.gone
+    //textviews to show emails found and html source
     TextView emailDisplay;
+    TextView htmlDisplay;
     byte emailsFound = 0;
 
     //this EditText is where the user's URL input goes, queried URL is another store (created URL) of the input
@@ -72,8 +71,6 @@ public class MainActivity extends Activity {
     //is the WebView already crawling?
     boolean crawlComplete;
 
-    //page loaded
-    boolean currentPageFinished = false;
 
 
 
@@ -91,13 +88,14 @@ public class MainActivity extends Activity {
 
         progressText = (TextView) findViewById(R.id.progressText);
         emailDisplay = (TextView) findViewById(R.id.emailDisplay);
+        htmlDisplay = (TextView) findViewById(R.id.htmlDisplay);
 
         //not current crawling:
         crawlComplete = false;
 
         browser = (WebView) findViewById(R.id.browser);
         browser.getSettings().setJavaScriptEnabled(true);
-        browser.addJavascriptInterface(new MyJavaScriptInterface(this), "HtmlOut");
+        browser.addJavascriptInterface(new MyJavaScriptInterface(this, this), "HtmlOut");
 
         browser.setWebViewClient(new WebViewClient() {
             @Override
@@ -114,11 +112,13 @@ public class MainActivity extends Activity {
     private class MyJavaScriptInterface {
         //This JS interface is called from WebView after onFinish
 
+        private HunterSeeker mHunterSeeker;
         private Context ctx;
 
-        MyJavaScriptInterface(Context ctx) {
+        MyJavaScriptInterface(Context ctx, HunterSeeker hunterSeeker) {
             //this interface will allow javascript to communicate with Android
             this.ctx = ctx;
+            this.mHunterSeeker = hunterSeeker;
         }
 
         @JavascriptInterface
@@ -130,21 +130,20 @@ public class MainActivity extends Activity {
 //                    .setPositiveButton(android.R.string.ok, null).setCancelable(false).create().show();
 
             //every time we call purify, we get a hashset, we want to copy that set into master
-            Log.v("processHTML", " just received html: " + html);
+            Log.v("processHTML", " just received html, show idx[0-100]: " + html.substring(0, 100));
             lastResult = html;
-            HashSet<String> tempHash = RegexUtils.purify(html, searchTerm);
-
-            if (tempHash.size() != 0) {
-                for (String string : tempHash) {
-                    emailsFound++;
-                    masterEmailSet.add(string);
-                    Log.v("masterEmailSet length", " +1 , total length: " + masterEmailSet.size());
+            final HashSet<String> emailsOnPage = RegexUtils.purify(html, searchTerm);
+            if ((html != null && !html.equals(""))  && emailsOnPage.size() > 0) {
+                try {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mHunterSeeker.onFinishPage(emailsOnPage, lastResult);
+                        }
+                    });
+                } catch (NullPointerException e ) {
+                    e.printStackTrace();
                 }
-            }
-
-            if (lastResult.equals("")) {
-                //if the last result was empty, log the event
-                Log.v("processHTML", " No result on the most recent page!");
             }
 
             pullLinks(lastResult);
@@ -170,12 +169,17 @@ public class MainActivity extends Activity {
                 });
             }
 
+            Log.v("processHtml", " will call onFinishPull on HunterSeeker instancel:" + mHunterSeeker.toString());
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    mHunterSeeker.onFinishPull(crawlComplete);
+                }
+            });
+
             sleepMilliseconds(1000);
-
-
-
-
         }
+
     }
 
     public void extractButton(View view) {
@@ -187,7 +191,6 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Network unavailable!", Toast.LENGTH_SHORT).show();
             return;
         }
-
 
         //User just typed in a URL and requested fetch
         if (!inputURL.getText().toString().equals("")) {
@@ -225,6 +228,7 @@ public class MainActivity extends Activity {
         // if there is an error loading this page (see below).
 
         //add the lastest url to visited URLs arraylist, increment links hit counter, add to bucket
+        crawlComplete = false;
         visitedLinks.add(URL);
         browser.loadUrl(URL);
 
@@ -248,14 +252,14 @@ public class MainActivity extends Activity {
             String possibleUrl = link.attr("abs:href");
 
             if (!possibleUrl.equals("")) {
-                Log.v("pullLinks", " will try to make URL from" + possibleUrl);
+//                Log.v("pullLinks", " will try to make URL from" + possibleUrl);
                 //if the link attr isn't empty, make a URL
                 URL theUrl = NetworkUtils.makeURL(possibleUrl);
 
                 if (RegexUtils.urlDomainNameMatch(firstLinkAsString, theUrl.toString())) {
                     //if the url is within the same domain as original query
                     if (!visitedLinks.contains(theUrl)) {
-                        Log.v("DLAsyncTask.pullLinks", " thinks that " + theUrl.toString() + " wasn't visited, add into collected...");
+//                        Log.v("DLAsyncTask.pullLinks", " thinks that " + theUrl.toString() + " wasn't visited, add into collected...");
                         collectedLinks.add(theUrl.toString());
                     }
                 }
@@ -270,8 +274,8 @@ public class MainActivity extends Activity {
             String thisURL = (String) itr.next();
             if (urlInHashSet(NetworkUtils.makeURL(thisURL), collectedLinks)) {
                 collectedLinks.remove(thisURL.toString());
-                Log.v("DLasync.cleanCollected", " from CollectedLinks, just cleaned: " + thisURL);
-                Log.v(".cleanCollected", " collected set is now:" + collectedLinks.toString());
+//                Log.v("DLasync.cleanCollected", " from CollectedLinks, just cleaned: " + thisURL);
+//                Log.v(".cleanCollected", " collected set is now:" + collectedLinks.toString());
             }
         }
 
@@ -296,17 +300,38 @@ public class MainActivity extends Activity {
 
         for (String setItem : set){
             if (NetworkUtils.urlHostPathMatch(NetworkUtils.makeURL(setItem), url)) {
-                Log.v("DLAsync.urlInHashSet", " just found " + url.toString() + " in " + set.toString());
+//                Log.v("DLAsync.urlInHashSet", " just found " + url.toString() + " in " + set.toString());
                 returnBoolean = true;
             }
         }
         return returnBoolean;
     }
 
+    @Override
+    public void onFinishPage(HashSet<String> set, String html) {
+        if (set.size() != 0) {
+            for (String string : set) {
+                emailsFound++;
+                masterEmailSet.add(string);
+                Log.v("onFinishPage", "masterEmailSet length " + " +1 , total length: " + masterEmailSet.size());
+            }
+        }
+
+        htmlDisplay.setText(html);
+        displayMasterEmails();
+    }
+
+    @Override
+    public void onFinishPull(boolean finished) {
+        if (finished) {setPostCrawlUI(); }
+    }
+
     private void displayMasterEmails(){
-        String masterEmails = "";
+        StringBuilder masterEmails = new StringBuilder();
         for (String email : masterEmailSet){
-            masterEmails.concat(email + "\n");
+            Log.v("Stringing over", "" + email);
+            masterEmails.append(email);
+            masterEmails.append("\n");
         }
         emailDisplay.setText(masterEmails);
     }
@@ -323,7 +348,8 @@ public class MainActivity extends Activity {
     public void setPostCrawlUI(){
         progressBar.setVisibility(View.GONE);
         browser.setVisibility(View.GONE);
-        topSection.setVisibility(View.VISIBLE);
+        //TODO: switch next line to visible once testing is complete
+        topSection.setVisibility(View.GONE);
         displayMasterEmails();
     }
 

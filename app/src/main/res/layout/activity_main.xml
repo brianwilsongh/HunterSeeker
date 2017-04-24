@@ -150,4 +150,12 @@
 
     </ScrollView>
 
+    <TextView
+        android:id="@+id/htmlDisplay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAlignment="center"
+        android:textSize="18sp"
+        android:textColor="@color/colorPrimaryDark"/>
+
 </LinearLayout>

@@ -33,8 +33,8 @@ public class RegexUtils {
             if (word != null) {
                 //if the word fits the format of an email (e.g. john.doe@email.com), consider it for HashSet
 
-                    //strip out only the text between potential HTML tags
-                    String regex = "[^>=\"\\/@\\(\\)]+@\\w+\\.[\\w&&[^<\"]]+";
+                    //strip out only the text between potential HTML tags, filter out filenames and API things
+                    String regex = "[^>=\"\\/@\\(\\);]+@\\w+\\.[[a-z[A-Z]]&&[^<\"(jpg||gif||png||calendar)]]+";
                     Pattern pattern = Pattern.compile(regex);
                     Matcher matcher = pattern.matcher(word);
                     if (matcher.find() && word.toLowerCase().contains(searchTerm.toLowerCase())) {
