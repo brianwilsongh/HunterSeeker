@@ -167,6 +167,7 @@ public class MainActivity extends Activity implements HunterSeeker{
                         @Override
                         public void run() {
                             mHunterSeeker.onFinishPage(emailsOnPage, lastHtmlResult);
+                            onSendUpdate("RegexUtils.purify returned " + emailsOnPage.size() + " items");
                         }
                     });
                 } catch (NullPointerException e ) {
@@ -199,8 +200,12 @@ public class MainActivity extends Activity implements HunterSeeker{
                     @Override
                     public void run() {
                         Log.v("processHTML", " loading page on browser:" + collectedLinks.iterator().next());
+                        onSendUpdate("Next hyperlink: " + collectedLinks.iterator().next());
                         visitedLinks.add(collectedLinks.iterator().next());
+                        long timer1 = System.nanoTime();
                         browser.loadUrl(collectedLinks.iterator().next());
+                        long timer1complete = System.nanoTime() - timer1;
+                        Log.v("browser.loadUrl", " took" + timer1complete + " ns");
                     }
                 });
             }
@@ -209,6 +214,7 @@ public class MainActivity extends Activity implements HunterSeeker{
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
+                    onSendUpdate("Finishing the call to processHTML method...");
                     mHunterSeeker.onFinishPull(crawlComplete);
                 }
             });
@@ -355,6 +361,11 @@ public class MainActivity extends Activity implements HunterSeeker{
     @Override
     public void onFinishPull(boolean finished) {
         if (finished) {setPostCrawlUI(); }
+    }
+
+    @Override
+    public void onSendUpdate(String updateItem) {
+        progressText.setText(updateItem);
     }
 
     private void displayMasterEmails(){

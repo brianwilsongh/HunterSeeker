@@ -8,6 +8,8 @@ import java.util.HashSet;
 
 public interface HunterSeeker {
 
+    void onSendUpdate(String updateItem);
+
     void onFinishPage(HashSet<String> set, String html);
         //called and received when a WebView page is finished and processHTML is called
 
