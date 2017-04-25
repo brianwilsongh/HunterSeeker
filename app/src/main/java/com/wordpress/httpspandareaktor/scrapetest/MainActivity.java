@@ -8,6 +8,8 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
@@ -98,8 +100,38 @@ public class MainActivity extends Activity implements HunterSeeker{
                         "('<html>'+document.getElementsByTagName('html')[0].innerHTML+'</html>');");
 
             }
-        });
 
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                //TODO: test if this overridden method works given a failed page
+                Log.v("WVClient.onReceiveError", " receieved an error" + error);
+                //do what would be done in processHTML but avoid anything to do with scraping, move onto next page
+                crawlComplete = false;
+
+                if (masterEmailSet.size() > 20){
+                    //if more than twenty emails have been discovered, the crawl is done
+                    crawlComplete = true;
+                }
+
+                if (masterEmailSet.size() > 0 && !searchTerm.equals("")){
+                    //if at least one email with the search term has been found, crawl is done
+                    crawlComplete = true;
+                }
+
+
+                if (collectedLinks.iterator().hasNext() && !crawlComplete){
+                    //if there's another link and crawl isn't deemed complete, hit next URL
+                    browser.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            Log.v("processHTML", " loading page on browser:" + collectedLinks.iterator().next());
+                            visitedLinks.add(collectedLinks.iterator().next());
+                            browser.loadUrl(collectedLinks.iterator().next());
+                        }
+                    });
+                }
+            }
+        });
     }
 
     private class MyJavaScriptInterface {
@@ -142,6 +174,8 @@ public class MainActivity extends Activity implements HunterSeeker{
                 }
             }
 
+            //from the extracted html, pull links for the crawler and run clean to be certain they haven't been visited
+            //TODO: check if the cleanCollectedLinks is necessary, perhaps implement the same functionality into pullLinks
             pullLinks(html);
             cleanCollectedLinks();
 
@@ -165,8 +199,8 @@ public class MainActivity extends Activity implements HunterSeeker{
                     @Override
                     public void run() {
                         Log.v("processHTML", " loading page on browser:" + collectedLinks.iterator().next());
-                        browser.loadUrl(collectedLinks.iterator().next());
                         visitedLinks.add(collectedLinks.iterator().next());
+                        browser.loadUrl(collectedLinks.iterator().next());
                     }
                 });
             }
@@ -225,8 +259,9 @@ public class MainActivity extends Activity implements HunterSeeker{
         // if there is an error loading this page (see below).
 
         //add this URL to visitedLinks and visit it
-        visitedLinks.add(URL);
-        browser.loadUrl(URL);
+        String refinedURL = NetworkUtils.makeURL(URL).toString();
+        visitedLinks.add(refinedURL);
+        browser.loadUrl(refinedURL);
 
         Log.v("hitURL", " -- reached end of the method");
 

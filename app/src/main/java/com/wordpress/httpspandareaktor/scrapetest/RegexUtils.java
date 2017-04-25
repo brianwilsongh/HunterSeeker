@@ -11,8 +11,6 @@ import java.util.regex.Pattern;
 
 public class RegexUtils {
 
-
-
     public static HashSet<String> purify(String input, String searchTerm) {
 
         //HashSet that will contain emails from input string
@@ -39,7 +37,7 @@ public class RegexUtils {
                     if (matcher.find() && word.toLowerCase().contains(searchTerm.toLowerCase())) {
                         //if the word matches and contains searchTerm ("" by default), add it in
                         Log.v("purify", " group(1) of this potential email: " + matcher.group(1));
-                        if (!matcher.group(1).matches("jpg|gif|png|calendar|cc")) {
+                        if (!matcher.group(1).matches("jpg|gif|png|calendar|cc|facebook")) {
                             //if the last partition says it's not a filename or garbage address
                             word = matcher.group();
                             word = word.replaceAll("mailto:", "");
