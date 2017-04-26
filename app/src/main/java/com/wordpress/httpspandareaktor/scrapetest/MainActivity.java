@@ -2,11 +2,14 @@ package com.wordpress.httpspandareaktor.scrapetest;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -33,7 +36,7 @@ import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends Activity implements HunterSeeker{
 
-    //this is the webview browser
+    //this is the webview browser that will load pages and later extract the HTML with JavaScript
     private WebView browser;
 
     //arraylists to store visited and unvisited urls
@@ -48,15 +51,16 @@ public class MainActivity extends Activity implements HunterSeeker{
 
     //textviews to show emails found and html source
     TextView emailDisplay;
-    TextView htmlDisplay;
     byte emailsFound = 0;
     String lastHtmlResult;
 
     //this EditText is where the user's URL input goes, queried URL is another store (created URL) of the input
-    EditText inputURL;
+    private EditText urlField;
 
-    //the progress bar that starts invisible but is revealed after search begins, and the search term if it exists
+    //the progress bar containing the animation + update text
     LinearLayout progressBar;
+
+    //field containing the search term (if any) which is stored as a string
     EditText searchTermField;
     String searchTerm;
 
@@ -69,8 +73,8 @@ public class MainActivity extends Activity implements HunterSeeker{
     //is the WebView already crawling?
     boolean crawlComplete;
 
-
-
+    //LinearLayout containing the reset button
+    LinearLayout resetSection;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,33 +82,289 @@ public class MainActivity extends Activity implements HunterSeeker{
         setContentView(R.layout.activity_main);
 
         searchTermField = (EditText) findViewById(R.id.searchTermField);
-
-        inputURL = (EditText) findViewById(R.id.inputURL);
-
+        urlField = (EditText) findViewById(R.id.inputURL);
         progressBar = (LinearLayout) findViewById(R.id.progressBar);
         topSection = (LinearLayout) findViewById(R.id.topSection);
-
         progressText = (TextView) findViewById(R.id.progressText);
         emailDisplay = (TextView) findViewById(R.id.emailDisplay);
-        htmlDisplay = (TextView) findViewById(R.id.htmlDisplay);
+        resetSection = (LinearLayout) findViewById(R.id.resetSection);
+
+        //done finding the views, now make browser by finding view and using helper method
 
         browser = (WebView) findViewById(R.id.browser);
+        setupBrowser();
+
+    }
+
+    public void clearURL(View view){
+        //clear the two edit text input fields
+        searchTermField.setText("");
+        urlField.setText("");
+    }
+
+    public void extractButton(View view) {
+        //first hide the soft input as it is not needed
+        InputMethodManager inputManager = (InputMethodManager)getSystemService(Activity.INPUT_METHOD_SERVICE);
+        inputManager.toggleSoftInput(InputMethodManager.HIDE_IMPLICIT_ONLY, 0);
+
+        Log.v("extractButton", " initialized with URL field as:" + urlField.getText().toString());
+
+        if (!networkAvailable()) {
+            //Error message if the network is unavailable
+            Toast.makeText(this, "Network unavailable!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        //User just typed in a URL and requested fetch
+        if (!urlField.getText().toString().equals("")) {
+            //if not empty, try to build URL, makeURL shoudld catch MalformedURLException
+            URL currentURL = NetworkUtils.makeURL(NetworkUtils.insertWebSubdomian(urlField.getText().toString()));
+
+            if (currentURL != null) {
+                Log.v("extractButton", " says URL field is acceptable");
+                firstLinkAsString = currentURL.toString();
+                searchTerm = searchTermField.getText().toString();
+                //if the currentlyRunning boolean says there are no current tasks going, make a new one and reference it
+
+                //set up the UI while the user waits, show the WebView as well
+                browser.setVisibility(View.VISIBLE);
+                topSection.setVisibility(View.GONE);
+                progressBar.setVisibility(View.VISIBLE);
+//                emailDisplay.setVisibility(View.VISIBLE);
+
+                //hit URL for an initial pull
+                hitURL(currentURL.toString());
+
+            } else {
+                Toast.makeText(this, "Bad URL! Try again", Toast.LENGTH_SHORT).show();
+            }
+
+        } else {
+            Toast.makeText(this, "Cannot extract from an empty URL!", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void hitURL(String URL){
+        // Simplest usage: note that an exception will NOT be thrown
+        // if there is an error loading this page (see below).
+
+        //add this URL to visitedLinks and visit it
+        Log.v(".hitURL", " now crawling at: " + URL);
+        String refinedURL = NetworkUtils.makeURL(URL).toString();
+        visitedLinks.add(refinedURL);
+        browser.loadUrl(refinedURL);
+
+
+        // OR, you can also load from an HTML string:
+//        String summary = "<html><body>You scored <b>192</b> points.</body></html>";
+//        webview.loadData(summary, "text/html", null);
+        // ... although note that there are restrictions on what this HTML can do.
+        // See the JavaDocs for loadData() and loadDataWithBaseURL() for more info.
+    }
+
+    private void pullLinks(String htmlPage) {
+        //this method pulls links from a page, if they haven't been visited, add into unvisited ArrayList<URL>
+
+        Document doc = Jsoup.parse(htmlPage);
+        Elements links = doc.select("a[href]");
+
+        for (Element link : links) {
+
+            String possibleUrl = link.attr("abs:href");
+
+            if (!possibleUrl.equals("")) {
+//                Log.v("pullLinks", " will try to make URL from" + possibleUrl);
+                //if the link attr isn't empty, make a URL
+                URL theUrl = NetworkUtils.makeURL(possibleUrl);
+
+                if (RegexUtils.urlDomainNameMatch(firstLinkAsString, theUrl.toString())) {
+                    //if the url is within the same domain as original query
+                    if (!visitedLinks.contains(theUrl)) {
+//                        Log.v("DLAsyncTask.pullLinks", " thinks that " + theUrl.toString() + " wasn't visited, add into collected...");
+                        collectedLinks.add(theUrl.toString());
+                    }
+                }
+            }
+
+        }
+    }
+
+    private void cleanCollectedLinks() {
+        //iterator to go over and clean out collectedLinks HashSet
+        for (Iterator itr = visitedLinks.iterator(); itr.hasNext(); ) {
+            String thisURL = (String) itr.next();
+            if (urlInHashSet(NetworkUtils.makeURL(thisURL), collectedLinks)) {
+                collectedLinks.remove(thisURL.toString());
+//                Log.v("DLasync.cleanCollected", " from CollectedLinks, just cleaned: " + thisURL);
+//                Log.v(".cleanCollected", " collected set is now:" + collectedLinks.toString());
+            }
+        }
+
+    }
+
+    private void sleepMilliseconds(int time) {
+        //try sleeping randomly up to time milliseconds
+        //prevent repeated suspicious activity from server
+        int multipliedParam = (int) (Math.random() * time + 1);
+
+        try {
+            TimeUnit.MILLISECONDS.sleep(multipliedParam);
+            Log.v("DLASync.sleep", " sleep " + multipliedParam + " milliseconds...");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private boolean urlInHashSet(URL url, HashSet<String> set){
+        //checks if the URL is in a provided HashSet with an improved for loop
+        boolean returnBoolean = false;
+
+        for (String setItem : set){
+            if (NetworkUtils.urlHostPathMatch(NetworkUtils.makeURL(setItem), url)) {
+//                Log.v("DLAsync.urlInHashSet", " just found " + url.toString() + " in " + set.toString());
+                returnBoolean = true;
+            }
+        }
+        return returnBoolean;
+    }
+
+    @Override
+    public void onFinishPage(HashSet<String> set, String html) {
+        if (set.size() != 0) {
+            for (String string : set) {
+                emailsFound++;
+                masterEmailSet.add(string);
+                Log.v("onFinishPage", "masterEmailSet length " + " +1 , total length: " + masterEmailSet.size());
+            }
+        }
+
+        displayMasterEmails();
+    }
+
+    @Override
+    public void onFinishPull(boolean finished) {
+        if (finished) {setPostCrawlUI(); }
+    }
+
+    @Override
+    public void onSendUpdate(String updateItem) {
+        progressText.setText(updateItem);
+    }
+
+    private void displayMasterEmails(){
+        StringBuilder masterEmails = new StringBuilder();
+        for (String email : masterEmailSet){
+            Log.v("Stringing over", "" + email);
+            masterEmails.append(email);
+            masterEmails.append("\n");
+        }
+        emailDisplay.setText(masterEmails);
+    }
+
+    public void killTask(View view) {
+        //user wants to kill the AsyncTask
+        Log.v("MainActivity.killTask", " triggered");
+        if (!crawlComplete) {
+            crawlComplete = true;
+            browser.stopLoading();
+            browser.clearHistory();
+            browser.clearCache(true);
+            browser.loadUrl("about:blank");
+            browser.getSettings().setJavaScriptEnabled(true);
+            setPostCrawlUI();
+        }
+    }
+
+    public void setPostCrawlUI(){
+        resetSection.setVisibility(View.VISIBLE);
+        progressBar.setVisibility(View.GONE);
+        browser.setVisibility(View.GONE);
+        //TODO: switch next line to visible once testing is complete
+        topSection.setVisibility(View.GONE);
+        displayMasterEmails();
+    }
+
+    public void revertApp(View view){
+        Log.v("revertApp", " has been called, purging all HashSets and resetting UI");
+        //revert app to its original state, first by reverting UI elements then resetting data
+        resetSection.setVisibility(View.GONE);
+        topSection.setVisibility(View.VISIBLE);
+        progressBar.setVisibility(View.GONE);
+        browser.setVisibility(View.GONE);
+
+        emailDisplay.setText("");
+        masterEmailSet.clear();
+        visitedLinks.clear();
+        collectedLinks.clear();
+        Log.v("visit & collect sizes:", " " + visitedLinks.size() + " " + collectedLinks.size());
+        emailsFound = 0;
+        firstLinkAsString = "";
+        lastHtmlResult = "";
+
+    }
+
+    public boolean networkAvailable() {
+        //returns boolean to determine whether network is available, requires ACCESS_NETWORK_STATE permission
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = cm.getActiveNetworkInfo();
+        // if network is off, networkInfo will be null
+        //otherwise check if we are connected
+        if (networkInfo != null && networkInfo.isConnected()) {
+            return true;
+        }
+        return false;
+    }
+
+    public void setupBrowser() {
         browser.getSettings().setJavaScriptEnabled(true);
+        browser.getSettings().setDomStorageEnabled(true);
+        //try blocking the loading of images
+        browser.getSettings().setBlockNetworkImage(true);
         browser.addJavascriptInterface(new MyJavaScriptInterface(this, this), "HtmlOut");
 
         browser.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                //make strings for the update messages
+                final String onPageStartedUrl = url;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        onSendUpdate("Initiating page: " + onPageStartedUrl);
+                    }
+                });
+            }
+
+            @Override
+            public void onLoadResource(WebView view, String url) {
+                final String onLoadResourceUrl = url;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        onSendUpdate("Loading resource: " + onLoadResourceUrl);
+                    }
+                });
+            }
+
             @Override
             public void onPageFinished(WebView view, String url) {
                 //call processHTML from custom HtmlOut JS interface onPageFinished
                 browser.loadUrl("javascript:HtmlOut.processHTML" +
                         "('<html>'+document.getElementsByTagName('html')[0].innerHTML+'</html>');");
-
             }
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 //TODO: test if this overridden method works given a failed page
                 Log.v("WVClient.onReceiveError", " receieved an error" + error);
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        onSendUpdate("WVClient has received an error!");
+                    }
+                });
+
                 //do what would be done in processHTML but avoid anything to do with scraping, move onto next page
                 crawlComplete = false;
 
@@ -220,191 +480,6 @@ public class MainActivity extends Activity implements HunterSeeker{
             });
 
         }
-    }
-
-    public void extractButton(View view) {
-        Log.v("extractButton", " initialized with URL field as:" + inputURL.getText().toString());
-
-        if (!networkAvailable()) {
-            //Error message if the network is unavailable
-            Toast.makeText(this, "Network unavailable!", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        //User just typed in a URL and requested fetch
-        if (!inputURL.getText().toString().equals("")) {
-            //if not empty, try to build URL, makeURL shoudld catch MalformedURLException
-            URL currentURL = NetworkUtils.makeURL(inputURL.getText().toString());
-
-            if (currentURL != null) {
-                Log.v("extractButton", " says URL field is acceptable");
-                firstLinkAsString = inputURL.getText().toString();
-                searchTerm = searchTermField.getText().toString();
-                //if the currentlyRunning boolean says there are no current tasks going, make a new one and reference it
-
-                //set up the UI while the user waits, show the WebView as well
-                browser.setVisibility(View.VISIBLE);
-                topSection.setVisibility(View.GONE);
-                progressBar.setVisibility(View.VISIBLE);
-//                emailDisplay.setVisibility(View.VISIBLE);
-
-                //hit URL for an initial pull
-                hitURL(currentURL.toString());
-
-            } else {
-                Toast.makeText(this, "Bad URL! Try again", Toast.LENGTH_SHORT).show();
-            }
-
-        } else {
-            Toast.makeText(this, "Cannot extract from an empty URL!", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void hitURL(String URL){
-        // Simplest usage: note that an exception will NOT be thrown
-        // if there is an error loading this page (see below).
-
-        //add this URL to visitedLinks and visit it
-        String refinedURL = NetworkUtils.makeURL(URL).toString();
-        visitedLinks.add(refinedURL);
-        browser.loadUrl(refinedURL);
-
-        Log.v("hitURL", " -- reached end of the method");
-
-        // OR, you can also load from an HTML string:
-//        String summary = "<html><body>You scored <b>192</b> points.</body></html>";
-//        webview.loadData(summary, "text/html", null);
-        // ... although note that there are restrictions on what this HTML can do.
-        // See the JavaDocs for loadData() and loadDataWithBaseURL() for more info.
-    }
-
-    private void pullLinks(String htmlPage) {
-        //this method pulls links from a page, if they haven't been visited, add into unvisited ArrayList<URL>
-
-        Document doc = Jsoup.parse(htmlPage);
-        Elements links = doc.select("a[href]");
-
-        for (Element link : links) {
-
-            String possibleUrl = link.attr("abs:href");
-
-            if (!possibleUrl.equals("")) {
-//                Log.v("pullLinks", " will try to make URL from" + possibleUrl);
-                //if the link attr isn't empty, make a URL
-                URL theUrl = NetworkUtils.makeURL(possibleUrl);
-
-                if (RegexUtils.urlDomainNameMatch(firstLinkAsString, theUrl.toString())) {
-                    //if the url is within the same domain as original query
-                    if (!visitedLinks.contains(theUrl)) {
-//                        Log.v("DLAsyncTask.pullLinks", " thinks that " + theUrl.toString() + " wasn't visited, add into collected...");
-                        collectedLinks.add(theUrl.toString());
-                    }
-                }
-            }
-
-        }
-    }
-
-    private void cleanCollectedLinks() {
-        //iterator to go over and clean out collectedLinks HashSet
-        for (Iterator itr = visitedLinks.iterator(); itr.hasNext(); ) {
-            String thisURL = (String) itr.next();
-            if (urlInHashSet(NetworkUtils.makeURL(thisURL), collectedLinks)) {
-                collectedLinks.remove(thisURL.toString());
-//                Log.v("DLasync.cleanCollected", " from CollectedLinks, just cleaned: " + thisURL);
-//                Log.v(".cleanCollected", " collected set is now:" + collectedLinks.toString());
-            }
-        }
-
-    }
-
-    private void sleepMilliseconds(int time) {
-        //try sleeping randomly up to time milliseconds
-        //prevent repeated suspicious activity from server
-        int multipliedParam = (int) (Math.random() * time + 1);
-
-        try {
-            TimeUnit.MILLISECONDS.sleep(multipliedParam);
-            Log.v("DLASync.sleep", " sleep " + multipliedParam + " milliseconds...");
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private boolean urlInHashSet(URL url, HashSet<String> set){
-        //checks if the URL is in a provided HashSet with an improved for loop
-        boolean returnBoolean = false;
-
-        for (String setItem : set){
-            if (NetworkUtils.urlHostPathMatch(NetworkUtils.makeURL(setItem), url)) {
-//                Log.v("DLAsync.urlInHashSet", " just found " + url.toString() + " in " + set.toString());
-                returnBoolean = true;
-            }
-        }
-        return returnBoolean;
-    }
-
-    @Override
-    public void onFinishPage(HashSet<String> set, String html) {
-        if (set.size() != 0) {
-            for (String string : set) {
-                emailsFound++;
-                masterEmailSet.add(string);
-                Log.v("onFinishPage", "masterEmailSet length " + " +1 , total length: " + masterEmailSet.size());
-            }
-        }
-
-        htmlDisplay.setText(html);
-        displayMasterEmails();
-    }
-
-    @Override
-    public void onFinishPull(boolean finished) {
-        if (finished) {setPostCrawlUI(); }
-    }
-
-    @Override
-    public void onSendUpdate(String updateItem) {
-        progressText.setText(updateItem);
-    }
-
-    private void displayMasterEmails(){
-        StringBuilder masterEmails = new StringBuilder();
-        for (String email : masterEmailSet){
-            Log.v("Stringing over", "" + email);
-            masterEmails.append(email);
-            masterEmails.append("\n");
-        }
-        emailDisplay.setText(masterEmails);
-    }
-
-    public void killTask(View view) {
-        //user wants to kill the AsyncTask
-        Log.v("MainActivity.killTask", " triggered");
-        if (!crawlComplete) {
-            crawlComplete = true;
-            setPostCrawlUI();
-        }
-    }
-
-    public void setPostCrawlUI(){
-        progressBar.setVisibility(View.GONE);
-        browser.setVisibility(View.GONE);
-        //TODO: switch next line to visible once testing is complete
-        topSection.setVisibility(View.GONE);
-        displayMasterEmails();
-    }
-
-    public boolean networkAvailable() {
-        //returns boolean to determine whether network is available, requires ACCESS_NETWORK_STATE permission
-        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = cm.getActiveNetworkInfo();
-        // if network is off, networkInfo will be null
-        //otherwise check if we are connected
-        if (networkInfo != null && networkInfo.isConnected()) {
-            return true;
-        }
-        return false;
     }
 
 }

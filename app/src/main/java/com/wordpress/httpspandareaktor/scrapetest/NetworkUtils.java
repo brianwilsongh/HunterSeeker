@@ -41,6 +41,26 @@ public class NetworkUtils {
         return returnURL;
     }
 
+    public static String insertWebSubdomian(String theURL){
+        if (theURL.matches("(http://){1}(www){0}[^(www)]+")){
+            Log.v("NetworkUtils", " insertWebSubdomain found no www subdomain, fixing this url: " + theURL);
+            StringBuilder temp = new StringBuilder(theURL);
+            temp.insert(7, "www.");
+            Log.v("NetworkUtils", " newly fixed: " + temp.toString());
+            theURL = temp.toString();
+        }
+
+        if (theURL.matches("(https://){1}(www){0}[^(www)]+")){
+            Log.v("NetworkUtils", " makeURL found no www subdomain, fixing this url: " + theURL);
+            StringBuilder temp = new StringBuilder(theURL);
+            temp.insert(7, "www.");
+            Log.v("NetworkUtils", " newly fixed: " + temp.toString());
+            theURL = temp.toString();
+        }
+
+        return theURL;
+    }
+
     public static boolean urlHostPathMatch(URL urlA, URL urlB) {
         //check if the paths match of built URL objects
 

@@ -23,20 +23,22 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_margin="10dp"
+            android:layout_margin="20dp"
             android:orientation="vertical">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
-                android:text="Find emails containing:"
-                android:textColor="@color/colorAccent" />
+                android:text="Find email addresses containing :"
+                android:textColor="@color/colorAccent"
+                android:focusable="true"
+                android:focusableInTouchMode="true"/>
 
             <EditText
                 android:id="@+id/searchTermField"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Leave blank to find first ten"
+                android:hint="Leave blank to find emails at random"
                 android:inputType="text"
                 android:textSize="12sp" />
 
@@ -45,17 +47,19 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_margin="10dp"
+            android:layout_margin="20dp"
             android:orientation="vertical">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
-                android:text="Within this domain:"
+                android:text="Start search at :"
                 android:textColor="@color/colorAccent" />
 
+            <!-- is there a difference if I set inputType to textUri? -->
             <EditText
                 android:id="@+id/inputURL"
+                android:inputType="textUri"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:hint="http://www.example.com" />
@@ -76,7 +80,7 @@
                 android:onClick="extractButton"
                 android:paddingEnd="20dp"
                 android:paddingStart="20dp"
-                android:text="Seek"
+                android:text="Initiate"
                 android:textColor="@android:color/white"
                 android:textStyle="bold" />
 
@@ -88,7 +92,7 @@
                 android:onClick="clearURL"
                 android:paddingEnd="20dp"
                 android:paddingStart="20dp"
-                android:text="Clear URL"
+                android:text="Clear Fields"
                 android:textColor="@android:color/white" />
 
         </LinearLayout>
@@ -117,8 +121,11 @@
 
             <TextView
                 android:id="@+id/progressText"
+                android:maxLines="3"
                 android:layout_width="match_parent"
                 android:textAlignment="textEnd"
+                android:textSize="12sp"
+                android:textColor="@color/colorPrimary"
                 android:layout_height="wrap_content"
                 android:text="Sending query..." />
 
@@ -135,6 +142,36 @@
 
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/resetSection"
+        android:visibility="gone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="10dp">
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"/>
+
+        <Button
+            android:layout_gravity="center"
+            android:onClick="revertApp"
+            android:layout_width="0dp"
+            android:layout_weight="2"
+            android:layout_height="wrap_content"
+            android:background="@color/colorPrimaryDark"
+            android:textColor="#FFFFFF"
+            android:text="Erase Data and Reset"/>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"/>
+
+    </LinearLayout>
+
 
     <ScrollView
         android:layout_width="match_parent"
@@ -146,17 +183,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textAlignment="center"
-            android:textSize="18sp"
+            android:lineSpacingExtra="2dp"
+            android:textSize="17sp"
             android:textColor="@color/colorPrimaryDark"/>
 
     </ScrollView>
-
-    <TextView
-        android:id="@+id/htmlDisplay"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textAlignment="center"
-        android:textSize="5sp"
-        android:textColor="@color/colorPrimaryDark"/>
 
 </LinearLayout>
