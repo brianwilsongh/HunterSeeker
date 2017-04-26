@@ -89,7 +89,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:background="@color/colorPrimaryDark"
-                android:onClick="clearURL"
+                android:onClick="clearFields"
                 android:paddingEnd="20dp"
                 android:paddingStart="20dp"
                 android:text="Clear Fields"

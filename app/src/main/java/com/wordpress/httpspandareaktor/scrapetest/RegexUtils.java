@@ -31,18 +31,21 @@ public class RegexUtils {
                 //if the word fits the format of an email (e.g. john.doe@email.com), consider it for HashSet
 
                     //strip out only the text between potential HTML tags, filter out filenames and API things
-                    String regex = "[^>=\"\\/@\\(\\);:]+@\\w+\\.([[a-z[A-Z]]&&[^<\"]]+)";
+                    String regex = "[^>=\"\\/@\\(\\);:]+@(\\w+)\\.([[a-z[A-Z]]&&[^<\"]]+)";
                     Pattern pattern = Pattern.compile(regex);
                     Matcher matcher = pattern.matcher(word);
                     if (matcher.find() && word.toLowerCase().contains(searchTerm.toLowerCase())) {
                         //if the word matches and contains searchTerm ("" by default), add it in
                         Log.v("purify", " group(1) of this potential email: " + matcher.group(1));
-                        if (!matcher.group(1).matches("jpg|gif|png|calendar|cc|facebook")) {
-                            //if the last partition says it's not a filename or garbage address
-                            word = matcher.group();
-                            word = word.replaceAll("mailto:", "");
-                            emailsDiscovered.add(word);
-                            Log.v("RegexUtils.purify", "given searchTerm '" + searchTerm + "', found an email: " + word);
+                        if (!matcher.group(2).matches("jpg|gif|png|calendar|cc|facebook") && matcher.group(2).length() > 1) {
+                            //if the group 2 - like the '.com' part - isn't bogus then this might be legit
+                            if (!matcher.group(1).matches("example|email") && matcher.group(1).length() > 1) {
+                                //check group 1, which should be the email service provider
+                                word = matcher.group();
+                                word = word.replaceAll("mailto:", "");
+                                emailsDiscovered.add(word);
+                                Log.v("RegexUtils.purify", "given searchTerm '" + searchTerm + "', found an email: " + word);
+                            }
                         }
                     }
             }

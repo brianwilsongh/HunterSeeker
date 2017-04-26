@@ -13,6 +13,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
@@ -32,6 +33,7 @@ import java.io.InputStreamReader;
 import java.net.URL;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends Activity implements HunterSeeker{
@@ -41,7 +43,7 @@ public class MainActivity extends Activity implements HunterSeeker{
 
     //arraylists to store visited and unvisited urls
     private HashSet<String> visitedLinks = new HashSet<>();
-    private HashSet<String> collectedLinks = new HashSet<>();
+    private LinkedList<String> collectedLinks = new LinkedList<>();
     private HashSet<String> masterEmailSet = new HashSet<>();
 
 
@@ -96,7 +98,7 @@ public class MainActivity extends Activity implements HunterSeeker{
 
     }
 
-    public void clearURL(View view){
+    public void clearFields(View view){
         //clear the two edit text input fields
         searchTermField.setText("");
         urlField.setText("");
@@ -109,11 +111,12 @@ public class MainActivity extends Activity implements HunterSeeker{
 
         Log.v("extractButton", " initialized with URL field as:" + urlField.getText().toString());
 
-        if (!networkAvailable()) {
-            //Error message if the network is unavailable
-            Toast.makeText(this, "Network unavailable!", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        //doesn't seem to be necessary
+//        if (!networkAvailable()) {
+//            //Error message if the network is unavailable
+//            Toast.makeText(this, "Network unavailable!", Toast.LENGTH_SHORT).show();
+//            return;
+//        }
 
         //User just typed in a URL and requested fetch
         if (!urlField.getText().toString().equals("")) {
@@ -178,8 +181,8 @@ public class MainActivity extends Activity implements HunterSeeker{
                 URL theUrl = NetworkUtils.makeURL(possibleUrl);
 
                 if (RegexUtils.urlDomainNameMatch(firstLinkAsString, theUrl.toString())) {
-                    //if the url is within the same domain as original query
-                    if (!visitedLinks.contains(theUrl)) {
+                    //if the string version of url is within the same domain as original query
+                    if (!visitedLinks.contains(theUrl.toString())) {
 //                        Log.v("DLAsyncTask.pullLinks", " thinks that " + theUrl.toString() + " wasn't visited, add into collected...");
                         collectedLinks.add(theUrl.toString());
                     }
@@ -193,7 +196,7 @@ public class MainActivity extends Activity implements HunterSeeker{
         //iterator to go over and clean out collectedLinks HashSet
         for (Iterator itr = visitedLinks.iterator(); itr.hasNext(); ) {
             String thisURL = (String) itr.next();
-            if (urlInHashSet(NetworkUtils.makeURL(thisURL), collectedLinks)) {
+            if (urlInLinkedList(NetworkUtils.makeURL(thisURL), collectedLinks)) {
                 collectedLinks.remove(thisURL.toString());
 //                Log.v("DLasync.cleanCollected", " from CollectedLinks, just cleaned: " + thisURL);
 //                Log.v(".cleanCollected", " collected set is now:" + collectedLinks.toString());
@@ -215,7 +218,7 @@ public class MainActivity extends Activity implements HunterSeeker{
         }
     }
 
-    private boolean urlInHashSet(URL url, HashSet<String> set){
+    private boolean urlInLinkedList(URL url, LinkedList<String> set){
         //checks if the URL is in a provided HashSet with an improved for loop
         boolean returnBoolean = false;
 
@@ -317,6 +320,7 @@ public class MainActivity extends Activity implements HunterSeeker{
 
     public void setupBrowser() {
         browser.getSettings().setJavaScriptEnabled(true);
+        browser.getSettings().setUserAgentString("Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.4) Gecko/20100101 Firefox/4.0");
         browser.getSettings().setDomStorageEnabled(true);
         //try blocking the loading of images
         browser.getSettings().setBlockNetworkImage(true);
@@ -333,6 +337,17 @@ public class MainActivity extends Activity implements HunterSeeker{
                         onSendUpdate("Initiating page: " + onPageStartedUrl);
                     }
                 });
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+                //TODO: learn to achieve same effect with new version?
+                if (url.contains("dc.services.visualstudio.com/") || url.endsWith(".png") ||
+                        url.endsWith(".ico") || url.endsWith(".css")){
+                    Log.v("shouldInterceptRequest", " intercepted a request to: " + url);
+                    return null;
+                }
+                return super.shouldInterceptRequest(view, url);
             }
 
             @Override
